@@ -1,14 +1,19 @@
 import streamlit as st
-import plotly.graph_objects as go
 import pandas as pd
-from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
 
-from fuzzy_system import assess_health
+from fuzzy_system import (
+    assess_health,
+    risk_universe,
+    risk_mf,
+    rule_definitions
+)
 
 
-# ==================================================
+# ==========================================
 # PAGE CONFIGURATION
-# ==================================================
+# ==========================================
 
 st.set_page_config(
     page_title="FuzzyCare",
@@ -17,490 +22,641 @@ st.set_page_config(
 )
 
 
-# ==================================================
+# ==========================================
 # SESSION STATE
-# ==================================================
+# ==========================================
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
 
-# ==================================================
+# ==========================================
 # CUSTOM CSS
-# ==================================================
+# ==========================================
 
 st.markdown("""
 <style>
 
-/* Main application background */
 .stApp {
     background-color: #f7f9fc;
+    color: #263746;
 }
 
-/* Main content text */
-.stApp p,
-.stApp li,
-.stApp label,
-.stApp h1,
-.stApp h2,
-.stApp h3,
-.stApp h4 {
-    color: #263746 !important;
-}
-
-/* Main headings */
 h1, h2, h3 {
-    color: #173b4a !important;
+    color: #173b4a;
 }
 
-/* Header captions */
-.stCaption {
-    color: #64748b !important;
-}
-
-/* Metric cards */
-div[data-testid="stMetric"] {
-    background-color: #ffffff;
-    padding: 20px;
-    border-radius: 12px;
-    border: 1px solid #e5eaf0;
-}
-
-div[data-testid="stMetric"] label,
-div[data-testid="stMetric"] [data-testid="stMetricValue"] {
-    color: #173b4a !important;
-}
-
-/* Input fields */
-.stTextInput input,
-.stNumberInput input {
-    color: #263746 !important;
-    background-color: #ffffff !important;
-    border: 1px solid #d5dde5;
-}
-
-/* Select and radio labels */
-.stRadio label {
-    color: #263746 !important;
-}
-
-/* Buttons */
-.stButton > button {
-    background-color: #009688;
-    color: #ffffff !important;
+div.stButton > button {
+    background-color: #087f8c;
+    color: white;
     border-radius: 8px;
     border: none;
-    padding: 10px 20px;
 }
 
-.stButton > button p {
-    color: #ffffff !important;
-}
-
-.stButton > button:hover {
-    background-color: #00796b;
-    color: #ffffff !important;
-}
-
-/* Download button */
-.stDownloadButton button {
-    background-color: #009688;
-    color: white !important;
-}
-
-/* Information messages */
-div[data-testid="stAlert"] p {
-    color: #263746 !important;
-}
-
-/* Dataframe */
-div[data-testid="stDataFrame"] {
-    background-color: white;
-}
-
-/* Dividers */
-hr {
-    border-color: #e2e8f0;
+div.stButton > button:hover {
+    background-color: #066b76;
+    color: white;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
 
-# ==================================================
+# ==========================================
 # HEADER
-# ==================================================
+# ==========================================
 
-col1, col2 = st.columns([0.6, 5])
+st.title("🏥 FuzzyCare")
 
-with col1:
-    st.markdown("# 🏥")
-
-with col2:
-    st.markdown("## FuzzyCare")
-    st.caption("Smart Healthcare · Mamdani Fuzzy Inference System")
+st.caption(
+    "Smart Healthcare | Patient Health Risk Assessment "
+    "Using Mamdani Fuzzy Inference System"
+)
 
 st.divider()
 
 
-# ==================================================
+# ==========================================
 # NAVIGATION
-# ==================================================
+# ==========================================
 
 page = st.radio(
+
     "Navigation",
+
     [
         "Dashboard",
         "New Assessment",
         "Patient History",
         "Fuzzy Logic"
     ],
+
     horizontal=True,
+
     label_visibility="collapsed"
+
 )
 
-st.divider()
 
-
-# ==================================================
+# ==========================================
 # DASHBOARD
-# ==================================================
+# ==========================================
 
 if page == "Dashboard":
 
-    st.caption("PATIENT HEALTH RISK ASSESSMENT")
-
-    st.title("Dashboard")
-
-    st.write(
-        "Health risk assessment using Mamdani Fuzzy Inference System."
-    )
+    st.header("Dashboard")
 
     history = st.session_state.history
 
     total = len(history)
 
     low = sum(
-        p["Category"] == "Low Risk" for p in history
+        x["Category"] == "Low Risk"
+        for x in history
     )
 
     moderate = sum(
-        p["Category"] == "Moderate Risk" for p in history
+        x["Category"] == "Moderate Risk"
+        for x in history
     )
 
     high = sum(
-        p["Category"] == "High Risk" for p in history
+        x["Category"] == "High Risk"
+        for x in history
     )
-
-    # SUMMARY CARDS
 
     c1, c2, c3, c4 = st.columns(4)
 
     c1.metric("Total Assessments", total)
+
     c2.metric("Low Risk", low)
+
     c3.metric("Moderate Risk", moderate)
+
     c4.metric("High Risk", high)
 
-    st.write("")
+    st.divider()
 
-    left, right = st.columns(2)
+    if history:
 
-    # RISK DISTRIBUTION
+        chart_data = pd.DataFrame({
 
-    with left:
+            "Category": [
+                "Low Risk",
+                "Moderate Risk",
+                "High Risk"
+            ],
+
+            "Count": [
+                low,
+                moderate,
+                high
+            ]
+
+        })
 
         st.subheader("Risk Distribution")
 
-        if total > 0:
+        fig = px.pie(
 
-            fig = go.Figure(
-                data=[
-                    go.Pie(
-                        labels=[
-                            "Low Risk",
-                            "Moderate Risk",
-                            "High Risk"
-                        ],
-                        values=[
-                            low,
-                            moderate,
-                            high
-                        ],
-                        hole=0.55,
-                        marker=dict(
-                            colors=[
-                                "#22a06b",
-                                "#f0a52b",
-                                "#e5484d"
-                            ]
-                        )
-                    )
-                ]
-            )
+            chart_data,
 
-            fig.update_layout(
-                height=350,
-                paper_bgcolor="#ffffff",
-                plot_bgcolor="#ffffff",
-                font=dict(color="#263746"),
-                margin=dict(t=30, b=30)
-            )
+            names="Category",
 
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
+            values="Count",
 
-        else:
+            hole=0.5
 
-            st.info("No assessments available yet.")
+        )
 
-    # RECENT ASSESSMENTS
-
-    with right:
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
 
         st.subheader("Recent Assessments")
 
-        if total > 0:
+        df = pd.DataFrame(history).drop(
+            columns=["Activated Rules"],
+            errors="ignore"
+        )
 
-            recent = history[-5:][::-1]
+        st.dataframe(
+            df,
+            use_container_width=True
+        )
 
-            st.dataframe(
-                pd.DataFrame(recent),
-                use_container_width=True,
-                hide_index=True
-            )
+    else:
 
-        else:
-
-            st.info(
-                "Patient assessment records will appear here."
-            )
+        st.info(
+            "No assessments available. Create a new assessment."
+        )
 
 
-# ==================================================
-# NEW PATIENT ASSESSMENT
-# ==================================================
+# ==========================================
+# NEW ASSESSMENT
+# ==========================================
 
 elif page == "New Assessment":
 
-    st.caption("MAMDANI FUZZY INFERENCE SYSTEM")
-
-    st.title("New Patient Assessment")
+    st.header("Patient Health Assessment")
 
     st.write(
-        "Enter patient health parameters to calculate "
-        "the health risk score."
+        "Enter the patient's health information."
     )
 
-    st.divider()
+    with st.form("assessment_form"):
 
-    col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2)
 
-    with col1:
+        with col1:
 
-        patient_id = st.text_input(
-            "Patient ID",
-            placeholder="Enter patient ID"
+            patient_id = st.text_input(
+                "Patient ID",
+                value="1"
+            )
+
+            age_value = st.number_input(
+                "Age (Years)",
+                min_value=18,
+                max_value=100,
+                value=48
+            )
+
+            bmi_value = st.number_input(
+                "BMI",
+                min_value=10.0,
+                max_value=50.0,
+                value=24.8,
+                step=0.1
+            )
+
+        with col2:
+
+            bp_value = st.number_input(
+                "Systolic Blood Pressure (mmHg)",
+                min_value=70,
+                max_value=200,
+                value=120
+            )
+
+            glucose_value = st.number_input(
+                "Blood Glucose (mg/dL)",
+                min_value=50,
+                max_value=300,
+                value=100
+            )
+
+        submitted = st.form_submit_button(
+            "Assess Health",
+            use_container_width=True
         )
 
-        age = st.slider(
-            "Age (years)",
-            18,
-            100,
-            30
-        )
 
-        bmi = st.number_input(
-            "Body Mass Index (BMI)",
-            min_value=10.0,
-            max_value=50.0,
-            value=22.0,
-            step=0.5
-        )
-
-    with col2:
-
-        bp = st.number_input(
-            "Systolic Blood Pressure (mmHg)",
-            min_value=70,
-            max_value=200,
-            value=120
-        )
-
-        glucose = st.number_input(
-            "Fasting Blood Glucose (mg/dL)",
-            min_value=50,
-            max_value=300,
-            value=90
-        )
-
-    st.divider()
-
-    if st.button(
-        "🏥 Assess Health Risk",
-        type="primary",
-        use_container_width=True
-    ):
+    if submitted:
 
         if not patient_id.strip():
 
-            st.warning("Please enter Patient ID.")
-
-        elif any(
-            p["Patient ID"] == patient_id.strip()
-            for p in st.session_state.history
-        ):
-
-            st.warning(
-                "This Patient ID already exists in assessment history."
-            )
+            st.error("Please enter a Patient ID.")
 
         else:
 
             try:
 
-                score, category = assess_health(
-                    age,
-                    bmi,
-                    bp,
-                    glucose
+                result = assess_health(
+
+                    age_value,
+
+                    bmi_value,
+
+                    bp_value,
+
+                    glucose_value
+
                 )
 
-                # SAVE PATIENT RECORD
+
+                score = result["score"]
+
+                category = result["category"]
+
+                activated_rules = result["activated_rules"]
+
+
+                # ==================================
+                # SAVE RECORD
+                # ==================================
 
                 record = {
-                    "Patient ID": patient_id.strip(),
-                    "Date": datetime.now().strftime(
-                        "%d-%m-%Y %I:%M %p"
-                    ),
-                    "Age": age,
-                    "BMI": bmi,
-                    "BP": bp,
-                    "Glucose": glucose,
+
+                    "Patient ID": patient_id,
+
+                    "Age": age_value,
+
+                    "BMI": bmi_value,
+
+                    "BP": bp_value,
+
+                    "Glucose": glucose_value,
+
                     "Risk Score": score,
-                    "Category": category
+
+                    "Category": category,
+
+                    "Activated Rules": activated_rules
+
                 }
 
                 st.session_state.history.append(record)
 
-                st.success(
-                    "Assessment completed successfully!"
-                )
+
+                # ==================================
+                # ASSESSMENT RESULT
+                # ==================================
 
                 st.divider()
 
-                # RESULTS
+                st.subheader("Assessment Result")
 
-                st.header("Assessment Results")
+                c1, c2 = st.columns(2)
 
-                result1, result2 = st.columns(2)
-
-                result1.metric(
-                    "Health Risk Score",
-                    f"{score:.2f}/100"
+                c1.metric(
+                    "Risk Score",
+                    f"{score} / 100"
                 )
 
-                result2.metric(
+                c2.metric(
                     "Risk Category",
                     category
                 )
 
-                # GAUGE CHART
 
-                fig = go.Figure(
+                # Gauge chart
+
+                gauge = go.Figure(
+
                     go.Indicator(
+
                         mode="gauge+number",
+
                         value=score,
+
                         title={
                             "text": "Health Risk Score"
                         },
-                        number={
-                            "suffix": "/100"
-                        },
+
                         gauge={
+
                             "axis": {
                                 "range": [0, 100]
                             },
-                            "bar": {
-                                "color": "#009688"
-                            },
+
                             "steps": [
+
                                 {
                                     "range": [0, 35],
-                                    "color": "#b7e4c7"
+                                    "color": "#b8e6d0"
                                 },
+
                                 {
                                     "range": [35, 65],
-                                    "color": "#ffe5a0"
+                                    "color": "#f9e5a5"
                                 },
+
                                 {
                                     "range": [65, 100],
-                                    "color": "#ffb3b3"
+                                    "color": "#f3b6b6"
                                 }
-                            ]
-                        }
-                    )
-                )
 
-                fig.update_layout(
-                    height=350,
-                    paper_bgcolor="#ffffff",
-                    font=dict(color="#263746")
+                            ]
+
+                        }
+
+                    )
+
                 )
 
                 st.plotly_chart(
-                    fig,
+                    gauge,
                     use_container_width=True
                 )
 
-                # RISK DESCRIPTION
 
-                if category == "Low Risk":
+                # ==================================
+                # FUZZIFICATION RESULTS
+                # ==================================
 
-                    st.success(
-                        "The fuzzy system indicates a low health risk level."
+                st.divider()
+
+                st.subheader("1. Fuzzification Results")
+
+                membership_df = pd.DataFrame({
+
+                    "Parameter": [
+                        "Age",
+                        "BMI",
+                        "Blood Pressure",
+                        "Blood Glucose"
+                    ],
+
+                    "Membership Values": [
+
+                        str(result["age_membership"]),
+
+                        str(result["bmi_membership"]),
+
+                        str(result["bp_membership"]),
+
+                        str(result["glucose_membership"])
+
+                    ]
+
+                })
+
+                st.dataframe(
+                    membership_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+
+                # ==================================
+                # ACTIVATED RULES
+                # ==================================
+
+                st.divider()
+
+                st.subheader("2. Activated IF–THEN Rules")
+
+                st.write(
+                    "The following rules were activated "
+                    "for the given patient inputs."
+                )
+
+                rule_df = pd.DataFrame(
+                    activated_rules
+                )
+
+                rule_df["IF–THEN Rule"] = rule_df.apply(
+
+                    lambda row: (
+                        f"IF {row['Condition']}, "
+                        f"THEN Risk is {row['Output']}"
+                    ),
+
+                    axis=1
+
+                )
+
+                st.dataframe(
+
+                    rule_df[
+                        [
+                            "Rule",
+                            "IF–THEN Rule",
+                            "Firing Strength"
+                        ]
+                    ],
+
+                    use_container_width=True,
+
+                    hide_index=True
+
+                )
+
+
+                # ==================================
+                # RULE ACTIVATION GRAPH
+                # ==================================
+
+                st.subheader("3. Rule Activation Graph")
+
+                fig_rules = px.bar(
+
+                    rule_df,
+
+                    x="Rule",
+
+                    y="Firing Strength",
+
+                    color="Output",
+
+                    text="Firing Strength",
+
+                    title="Activated Rule Firing Strengths"
+
+                )
+
+                fig_rules.update_layout(
+
+                    xaxis_title="Activated Rules",
+
+                    yaxis_title="Firing Strength (0–1)",
+
+                    yaxis_range=[0, 1]
+
+                )
+
+                st.plotly_chart(
+                    fig_rules,
+                    use_container_width=True
+                )
+
+
+                # ==================================
+                # OUTPUT MEMBERSHIP GRAPH
+                # ==================================
+
+                st.divider()
+
+                st.subheader(
+                    "4. Risk Output Membership Functions"
+                )
+
+                fig_risk = go.Figure()
+
+                for term in ["low", "moderate", "high"]:
+
+                    fig_risk.add_trace(
+
+                        go.Scatter(
+
+                            x=risk_universe,
+
+                            y=risk_mf[term],
+
+                            mode="lines",
+
+                            name=term.title()
+
+                        )
+
                     )
 
-                elif category == "Moderate Risk":
 
-                    st.warning(
-                        "The fuzzy system indicates a moderate health risk level."
+                # Final score marker
+
+                fig_risk.add_vline(
+
+                    x=score,
+
+                    line_dash="dash",
+
+                    annotation_text=f"Final Score: {score}"
+
+                )
+
+
+                fig_risk.update_layout(
+
+                    title="Risk Membership Functions",
+
+                    xaxis_title="Risk Score",
+
+                    yaxis_title="Membership Degree",
+
+                    yaxis_range=[0, 1]
+
+                )
+
+                st.plotly_chart(
+                    fig_risk,
+                    use_container_width=True
+                )
+
+
+                # ==================================
+                # AGGREGATED OUTPUT GRAPH
+                # ==================================
+
+                st.subheader(
+                    "5. Aggregated Fuzzy Output"
+                )
+
+                fig_agg = go.Figure()
+
+                fig_agg.add_trace(
+
+                    go.Scatter(
+
+                        x=risk_universe,
+
+                        y=result["aggregated_output"],
+
+                        mode="lines",
+
+                        fill="tozeroy",
+
+                        name="Aggregated Output"
+
                     )
 
-                else:
+                )
 
-                    st.error(
-                        "The fuzzy system indicates a high health risk level."
-                    )
+                fig_agg.add_vline(
+
+                    x=score,
+
+                    line_dash="dash",
+
+                    annotation_text=f"Centroid: {score}"
+
+                )
+
+                fig_agg.update_layout(
+
+                    title="Aggregated Output After Rule Evaluation",
+
+                    xaxis_title="Risk Score",
+
+                    yaxis_title="Membership Degree",
+
+                    yaxis_range=[0, 1]
+
+                )
+
+                st.plotly_chart(
+                    fig_agg,
+                    use_container_width=True
+                )
+
+
+                st.success(
+                    f"Assessment completed: {category}"
+                )
 
                 st.caption(
                     "Educational prototype only. "
-                    "Results are not a medical diagnosis."
+                    "This result is not a medical diagnosis."
                 )
+
 
             except Exception as e:
 
                 st.error(
-                    f"Assessment error: {e}"
+                    f"Assessment could not be completed: {e}"
                 )
 
 
-# ==================================================
+# ==========================================
 # PATIENT HISTORY
-# ==================================================
+# ==========================================
 
 elif page == "Patient History":
 
-    st.caption("PATIENT RECORDS")
-
-    st.title("Patient History")
+    st.header("Patient Assessment History")
 
     history = st.session_state.history
 
     if history:
 
-        df = pd.DataFrame(history)
+        df = pd.DataFrame(history).drop(
+
+            columns=["Activated Rules"],
+
+            errors="ignore"
+
+        )
 
         search = st.text_input(
             "Search Patient ID"
@@ -522,124 +678,121 @@ elif page == "Patient History":
             hide_index=True
         )
 
-        st.divider()
-
-        csv = df.to_csv(
-            index=False
-        ).encode("utf-8")
-
         st.download_button(
-            "Download Patient Records (CSV)",
-            csv,
-            "FuzzyCare_Patient_History.csv",
-            "text/csv"
+
+            "Download History CSV",
+
+            df.to_csv(index=False),
+
+            file_name="fuzzycare_history.csv",
+
+            mime="text/csv"
+
         )
 
     else:
 
-        st.info(
-            "No patient records available. "
-            "Complete a new assessment first."
-        )
+        st.info("No patient records available.")
 
 
-# ==================================================
+# ==========================================
 # FUZZY LOGIC
-# ==================================================
+# ==========================================
 
 elif page == "Fuzzy Logic":
 
-    st.caption("COMPUTATIONAL INTELLIGENCE")
-
-    st.title("Mamdani Fuzzy Inference System")
+    st.header("Mamdani Fuzzy Inference System")
 
     st.write(
         "FuzzyCare uses a Mamdani Fuzzy Inference System "
-        "to assess patient health risk based on four input parameters."
+        "to estimate patient health risk."
     )
 
-    st.divider()
+    st.subheader("System Workflow")
 
-    st.subheader("1. Input Variables")
-
-    st.write("""
-    The system considers four input parameters:
-
-    - **Age:** Young, Middle-aged, Old
-    - **BMI:** Low, Normal, High
-    - **Blood Pressure:** Normal, Elevated, High
-    - **Glucose:** Normal, Elevated, High
-    """)
-
-    st.subheader("2. Fuzzification")
-
-    st.write("""
-    Crisp input values are converted into fuzzy membership
-    degrees using triangular and trapezoidal membership functions.
-    """)
-
-    st.subheader("3. Fuzzy Rule Evaluation")
-
-    st.write("""
-    "The system contains 12 manually designed IF-THEN fuzzy rules."
-
-    Example:
-
-    IF Age is Old AND BMI is High
-    AND Blood Pressure is High
-    AND Glucose is High
-
-    THEN Health Risk is High.
-    """)
-
-    st.subheader("4. Aggregation")
-
-    st.write("""
-    The outputs of activated fuzzy rules are combined
-    using the Maximum aggregation operator.
-    """)
-
-    st.subheader("5. Defuzzification")
-
-    st.write("""
-    The Centroid method converts the aggregated fuzzy output
-    into a crisp numerical health risk score ranging from 0 to 100.
+    st.markdown("""
+    1. **Input Collection:** Age, BMI, Blood Pressure and Glucose.
+    2. **Fuzzification:** Converts numerical inputs into membership degrees.
+    3. **Rule Evaluation:** Evaluates 81 IF–THEN rules.
+    4. **Implication:** Clips the output membership function using the rule firing strength.
+    5. **Aggregation:** Combines rule outputs using the maximum operator.
+    6. **Defuzzification:** Uses the centroid method to calculate a crisp score.
+    7. **Classification:** Classifies the score as Low, Moderate or High Risk.
     """)
 
     st.divider()
 
-    st.subheader("System Configuration")
+    st.subheader("Input Variables")
 
-    st.table({
-        "Component": [
-            "Fuzzy Model",
-            "Input Variables",
-            "Output Variable",
-            "Membership Functions",
-            "Rule Base",
-            "AND Operator",
-            "Aggregation",
-            "Defuzzification"
-        ],
-        "Implementation": [
-            "Mamdani FIS",
-            "4",
-            "Health Risk",
-            "Triangular and Trapezoidal",
-            "12 Rules",
-            "Minimum",
-            "Maximum",
-            "Centroid"
-        ]
-    })
+    st.dataframe(
 
+        pd.DataFrame({
 
-# ==================================================
-# FOOTER
-# ==================================================
+            "Input": [
+                "Age",
+                "BMI",
+                "Systolic BP",
+                "Blood Glucose"
+            ],
 
-st.divider()
+            "Range": [
+                "18–100 years",
+                "10–50",
+                "70–200 mmHg",
+                "50–300 mg/dL"
+            ],
 
-st.caption(
-    "FuzzyCare | Smart Healthcare - Mamdani Fuzzy Inference System"
-)
+            "Categories": [
+                "Young, Middle, Old",
+                "Low, Normal, High",
+                "Normal, Elevated, High",
+                "Normal, Elevated, High"
+            ]
+
+        }),
+
+        use_container_width=True,
+
+        hide_index=True
+
+    )
+
+    st.subheader("Output Variable")
+
+    st.write(
+        "Risk score ranges from 0 to 100."
+    )
+
+    st.write(
+        "Output categories: Low, Moderate and High."
+    )
+
+    st.subheader("Membership Functions")
+
+    st.write(
+        "Triangular and trapezoidal membership functions "
+        "are used."
+    )
+
+    st.subheader("Rule Base")
+
+    st.write(
+        f"The system contains {len(rule_definitions)} "
+        "automatically generated IF–THEN rules."
+    )
+
+    st.dataframe(
+
+        pd.DataFrame(rule_definitions),
+
+        use_container_width=True,
+
+        hide_index=True
+
+    )
+
+    st.info(
+        "The rule-output mapping uses illustrative severity "
+        "weights for an academic prototype. It is not medically "
+        "validated and should not be used for clinical decisions."
+    )
